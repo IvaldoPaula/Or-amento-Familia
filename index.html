@@ -1,0 +1,784 @@
+<!DOCTYPE html>
+<html lang="pt-BR" class="h-full">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Orçamento Familiar</title>
+  
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#eef2ff',
+              100: '#e0e7ff',
+              500: '#6366f1',
+              600: '#4f46e5',
+              700: '#4338ca',
+              900: '#312e81'
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  
+  <!-- Chart.js para visualização visual -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <!-- Alpine.js para reatividade limpa no front -->
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+    body {
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      -webkit-tap-highlight-color: transparent;
+      user-select: none;
+    }
+    /* Dynamic height adjustment for iOS safari mobile toolbars */
+    .app-screen {
+      min-height: 100vh;
+      min-height: -webkit-fill-available;
+    }
+    .pb-safe {
+      padding-bottom: calc(4.5rem + env(safe-area-inset-bottom, 0px));
+    }
+    .pt-safe {
+      padding-top: env(safe-area-inset-top, 0px);
+    }
+  </style>
+</head>
+
+<body class="bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-100 h-full antialiased" x-data="budgetApp()" x-init="initApp()">
+
+  <!-- APP CONTAINER -->
+  <div class="max-w-md mx-auto min-h-screen flex flex-col relative bg-slate-50 dark:bg-slate-950 shadow-2xl overflow-hidden pb-safe">
+    
+    <!-- HEADER FIXO SUPORTE MOBILE -->
+    <header class="sticky top-0 z-30 bg-slate-50/90 dark:bg-slate-950/90 backdrop-blur-md px-5 pt-safe pt-4 pb-3 border-b border-slate-200/80 dark:border-slate-800/80 flex justify-between items-center">
+      <div>
+        <h1 class="text-xs font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">Gestão Financeira</h1>
+        <h2 class="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+          <i data-lucide="wallet" class="w-5 h-5 text-brand-600 dark:text-brand-500"></i>
+          Orçamento Familiar
+        </h2>
+      </div>
+
+      <div class="flex items-center gap-2">
+        <!-- Alternar Tema Dark/Light -->
+        <button @click="toggleDarkMode()" class="p-2.5 rounded-full bg-slate-200/60 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition">
+          <i data-lucide="sun" x-show="darkMode" class="w-4 h-4 text-amber-400"></i>
+          <i data-lucide="moon" x-show="!darkMode" class="w-4 h-4 text-slate-600"></i>
+        </button>
+
+        <!-- Menu Config / Backup -->
+        <button @click="activeTab = 'settings'" class="p-2.5 rounded-full bg-slate-200/60 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition">
+          <i data-lucide="settings" class="w-4 h-4"></i>
+        </button>
+      </div>
+    </header>
+
+    <!-- CONTEÚDO PRINCIPAL (MUDANÇA DE ABAS) -->
+    <main class="flex-1 px-4 pt-4 overflow-y-auto">
+
+      <!-- ABA 1: DASHBOARD / RESUMO -->
+      <section x-show="activeTab === 'dashboard'" x-transition:enter="transition ease-out duration-200" x-transition:enter-start="opacity-0 translate-y-2" class="space-y-4">
+        
+        <!-- CARD HERO: SOBRA MENSAL -->
+        <div class="relative overflow-hidden rounded-3xl p-5 text-white shadow-xl transition-all"
+             :class="netBalance >= 0 ? 'bg-gradient-to-br from-emerald-600 via-teal-700 to-slate-900' : 'bg-gradient-to-br from-rose-600 via-red-700 to-slate-900'">
+          <div class="relative z-10">
+            <span class="text-xs font-semibold uppercase tracking-widest text-emerald-100 opacity-80">Sobra Mensal Estimada</span>
+            <div class="text-3xl font-black mt-1 tracking-tight" x-text="formatCurrency(netBalance)"></div>
+
+            <div class="mt-4 pt-4 border-t border-white/15 grid grid-cols-2 gap-2 text-xs">
+              <div>
+                <span class="opacity-75 block text-[10px] uppercase tracking-wider">Total Entradas</span>
+                <span class="text-sm font-bold text-emerald-200" x-text="formatCurrency(totalIncome)"></span>
+              </div>
+              <div>
+                <span class="opacity-75 block text-[10px] uppercase tracking-wider">Total Saídas</span>
+                <span class="text-sm font-bold text-rose-200" x-text="formatCurrency(totalExpenses)"></span>
+              </div>
+            </div>
+          </div>
+          <!-- Efeito decorativo de fundo -->
+          <div class="absolute -right-8 -bottom-8 w-32 h-32 rounded-full bg-white/10 blur-xl"></div>
+        </div>
+
+        <!-- BARRA DE PROGRESSO DE COMPROMETIMENTO DA RENDA -->
+        <div class="bg-white dark:bg-slate-900 p-4 rounded-2xl shadow-sm border border-slate-200/70 dark:border-slate-800">
+          <div class="flex justify-between items-center text-xs mb-1.5 font-medium">
+            <span class="text-slate-600 dark:text-slate-400">Comprometimento da Renda</span>
+            <span class="font-bold text-slate-800 dark:text-slate-200" x-text="incomeUsagePercentage + '%'"></span>
+          </div>
+          <div class="w-full bg-slate-100 dark:bg-slate-800 rounded-full h-3 overflow-hidden">
+            <div class="h-full rounded-full transition-all duration-500"
+                 :class="incomeUsagePercentage > 90 ? 'bg-rose-500' : (incomeUsagePercentage > 75 ? 'bg-amber-500' : 'bg-emerald-500')"
+                 :style="`width: ${Math.min(incomeUsagePercentage, 100)}%`"></div>
+          </div>
+          <div class="mt-2 text-[11px] text-slate-400 dark:text-slate-500 text-right">
+            Meta de reserva: guardar ao menos 20%
+          </div>
+        </div>
+
+        <!-- GRÁFICO DE DISTRIBUIÇÃO -->
+        <div class="bg-white dark:bg-slate-900 p-4 rounded-2xl shadow-sm border border-slate-200/70 dark:border-slate-800">
+          <h3 class="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-3 flex items-center justify-between">
+            <span>Gastos por Categoria</span>
+            <i data-lucide="pie-chart" class="w-4 h-4"></i>
+          </h3>
+          <div class="relative h-48 w-full flex justify-center items-center">
+            <canvas id="categoryChart"></canvas>
+          </div>
+        </div>
+
+        <!-- RESUMO RÁPIDO DE FONTES DE RECEITA -->
+        <div class="bg-white dark:bg-slate-900 p-4 rounded-2xl shadow-sm border border-slate-200/70 dark:border-slate-800 space-y-3">
+          <div class="flex justify-between items-center">
+            <h3 class="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Fontes Principais</h3>
+            <button @click="activeTab = 'income'" class="text-xs text-brand-600 dark:text-brand-400 font-semibold">Editar</button>
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div class="p-3 bg-emerald-50 dark:bg-emerald-950/40 rounded-xl border border-emerald-100 dark:border-emerald-900/50">
+              <span class="text-[10px] font-bold text-emerald-700 dark:text-emerald-400 block uppercase">Servidor Maranhão</span>
+              <span class="text-base font-extrabold text-emerald-900 dark:text-emerald-200" x-text="formatCurrency(incomes.ma)"></span>
+            </div>
+            <div class="p-3 bg-teal-50 dark:bg-teal-950/40 rounded-xl border border-teal-100 dark:border-teal-900/50">
+              <span class="text-[10px] font-bold text-teal-700 dark:text-teal-400 block uppercase">Servidor Pará</span>
+              <span class="text-base font-extrabold text-teal-900 dark:text-teal-200" x-text="formatCurrency(incomes.pa)"></span>
+            </div>
+          </div>
+        </div>
+
+      </section>
+
+
+      <!-- ABA 2: RECEITAS (SERVIDORES MA / PA) -->
+      <section x-show="activeTab === 'income'" x-transition:enter="transition ease-out duration-200" x-transition:enter-start="opacity-0 translate-y-2" class="space-y-4">
+        
+        <div class="bg-white dark:bg-slate-900 p-5 rounded-2xl shadow-sm border border-slate-200/70 dark:border-slate-800 space-y-4">
+          <div class="flex items-center gap-2">
+            <div class="p-2 bg-emerald-100 dark:bg-emerald-900/60 rounded-xl text-emerald-600 dark:text-emerald-300">
+              <i data-lucide="landmark" class="w-5 h-5"></i>
+            </div>
+            <div>
+              <h3 class="text-base font-bold text-slate-900 dark:text-white">Receitas de Servidor</h3>
+              <p class="text-xs text-slate-500">Atualize os valores líquidos mensais recebidos.</p>
+            </div>
+          </div>
+
+          <!-- Input MA -->
+          <div class="space-y-1.5">
+            <label class="text-xs font-semibold text-slate-700 dark:text-slate-300 flex justify-between">
+              <span>Servidor Público (Maranhão - MA)</span>
+              <span class="text-emerald-600 font-bold" x-text="formatCurrency(incomes.ma)"></span>
+            </label>
+            <div class="relative">
+              <span class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-semibold text-sm">R$</span>
+              <input type="number" step="0.01" x-model.number="incomes.ma" @input="saveData()"
+                     class="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white font-semibold focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+            </div>
+          </div>
+
+          <!-- Input PA -->
+          <div class="space-y-1.5">
+            <label class="text-xs font-semibold text-slate-700 dark:text-slate-300 flex justify-between">
+              <span>Servidor Público (Pará - PA)</span>
+              <span class="text-teal-600 font-bold" x-text="formatCurrency(incomes.pa)"></span>
+            </label>
+            <div class="relative">
+              <span class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-semibold text-sm">R$</span>
+              <input type="number" step="0.01" x-model.number="incomes.pa" @input="saveData()"
+                     class="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white font-semibold focus:ring-2 focus:ring-teal-500 focus:outline-none">
+            </div>
+          </div>
+
+          <!-- Outra Renda Extra se Houver -->
+          <div class="space-y-1.5">
+            <label class="text-xs font-semibold text-slate-700 dark:text-slate-300 flex justify-between">
+              <span>Outras Rendas / Extras</span>
+              <span class="text-slate-600 font-bold" x-text="formatCurrency(incomes.extra)"></span>
+            </label>
+            <div class="relative">
+              <span class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-semibold text-sm">R$</span>
+              <input type="number" step="0.01" x-model.number="incomes.extra" @input="saveData()"
+                     class="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white font-semibold focus:ring-2 focus:ring-brand-500 focus:outline-none">
+            </div>
+          </div>
+
+          <!-- TOTAL RECEITAS -->
+          <div class="pt-3 border-t border-slate-200 dark:border-slate-800 flex justify-between items-center">
+            <span class="text-xs font-bold text-slate-500 uppercase">Total de Entradas</span>
+            <span class="text-lg font-black text-emerald-600 dark:text-emerald-400" x-text="formatCurrency(totalIncome)"></span>
+          </div>
+        </div>
+
+      </section>
+
+
+      <!-- ABA 3: DESPESAS & CATEGORIAS -->
+      <section x-show="activeTab === 'expenses'" x-transition:enter="transition ease-out duration-200" x-transition:enter-start="opacity-0 translate-y-2" class="space-y-4">
+        
+        <!-- BOTÃO ADICIONAR ITEM PERSONALIZADO -->
+        <div class="flex justify-between items-center">
+          <h3 class="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Lançamentos de Gastos</h3>
+          <button @click="openAddExpenseModal()" class="px-3 py-1.5 bg-brand-600 hover:bg-brand-700 text-white rounded-xl text-xs font-semibold flex items-center gap-1 shadow-md shadow-brand-500/20 active:scale-95 transition">
+            <i data-lucide="plus" class="w-3.5 h-3.5"></i>
+            Novo Gasto
+          </button>
+        </div>
+
+        <!-- LOOP DE CATEGORIAS -->
+        <template x-for="(cat, catKey) in categories" :key="catKey">
+          <div class="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-200/70 dark:border-slate-800 overflow-hidden">
+            
+            <!-- CABEÇALHO DA CATEGORIA -->
+            <div @click="cat.open = !cat.open" class="p-4 flex justify-between items-center cursor-pointer bg-slate-50/50 dark:bg-slate-800/30">
+              <div class="flex items-center gap-2.5">
+                <div class="p-2 rounded-xl text-white shadow-sm" :class="cat.bgColor">
+                  <i :data-lucide="cat.icon" class="w-4 h-4"></i>
+                </div>
+                <div>
+                  <h4 class="text-sm font-bold text-slate-800 dark:text-slate-100" x-text="cat.name"></h4>
+                  <span class="text-[11px] text-slate-400" x-text="getCategoryItemsCount(catKey) + ' itens'"></span>
+                </div>
+              </div>
+              <div class="flex items-center gap-2">
+                <span class="text-sm font-extrabold text-slate-900 dark:text-slate-200" x-text="formatCurrency(getCategoryTotal(catKey))"></span>
+                <i data-lucide="chevron-down" class="w-4 h-4 text-slate-400 transition-transform duration-200" :class="cat.open ? 'rotate-180' : ''"></i>
+              </div>
+            </div>
+
+            <!-- LISTA DE ITENS DA CATEGORIA -->
+            <div x-show="cat.open" x-collapse class="divide-y divide-slate-100 dark:divide-slate-800/60 border-t border-slate-100 dark:border-slate-800">
+              <template x-for="(item, index) in cat.items" :key="index">
+                <div class="p-3.5 flex items-center justify-between hover:bg-slate-50/80 dark:hover:bg-slate-800/20 transition">
+                  <div class="flex-1 pr-2">
+                    <span class="text-xs font-semibold text-slate-800 dark:text-slate-200 block" x-text="item.name"></span>
+                    <span class="text-[10px] text-slate-400 block" x-text="item.note || 'Despesa mensal'"></span>
+                  </div>
+                  
+                  <div class="flex items-center gap-3">
+                    <div class="relative w-28">
+                      <span class="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs font-semibold">R$</span>
+                      <input type="number" step="0.01" x-model.number="item.value" @input="saveData()"
+                             class="w-full pl-7 pr-2 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-right text-xs font-bold text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-brand-500 focus:outline-none">
+                    </div>
+                    <button @click="deleteExpense(catKey, index)" class="text-slate-300 hover:text-rose-500 dark:text-slate-600 dark:hover:text-rose-400 transition p-1">
+                      <i data-lucide="trash-2" class="w-4 h-4"></i>
+                    </button>
+                  </div>
+                </div>
+              </template>
+
+              <!-- Botão adicionar rápido nesta categoria -->
+              <div class="p-2.5 text-center bg-slate-50/30 dark:bg-slate-800/10">
+                <button @click="openAddExpenseModal(catKey)" class="text-xs font-semibold text-brand-600 dark:text-brand-400 hover:underline inline-flex items-center gap-1">
+                  <i data-lucide="plus-circle" class="w-3.5 h-3.5"></i>
+                  Adicionar em <span x-text="cat.name"></span>
+                </button>
+              </div>
+            </div>
+
+          </div>
+        </template>
+
+      </section>
+
+
+      <!-- ABA 4: CONFIGURAÇÕES E BACKUP -->
+      <section x-show="activeTab === 'settings'" x-transition:enter="transition ease-out duration-200" x-transition:enter-start="opacity-0 translate-y-2" class="space-y-4">
+        
+        <div class="bg-white dark:bg-slate-900 p-5 rounded-2xl shadow-sm border border-slate-200/70 dark:border-slate-800 space-y-4">
+          <h3 class="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+            <i data-lucide="database" class="w-4 h-4 text-brand-500"></i>
+            Gerenciamento de Dados
+          </h3>
+          <p class="text-xs text-slate-500">
+            Seus dados são salvos <strong>exclusivamente neste celular/navegador</strong> para garantir sua privacidade.
+          </p>
+
+          <div class="space-y-2.5 pt-2">
+            <!-- Exportar Backup -->
+            <button @click="exportData()" class="w-full py-2.5 px-4 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition">
+              <i data-lucide="download" class="w-4 h-4"></i>
+              Fazer Backup (Baixar Arquivo JSON)
+            </button>
+
+            <!-- Importar Backup -->
+            <label class="w-full py-2.5 px-4 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition cursor-pointer">
+              <i data-lucide="upload" class="w-4 h-4"></i>
+              Restaurar Backup (Carregar JSON)
+              <input type="file" accept=".json" @change="importData($event)" class="hidden">
+            </label>
+
+            <!-- Resetar Dados -->
+            <button @click="resetToDefault()" class="w-full py-2.5 px-4 bg-rose-50 dark:bg-rose-950/30 hover:bg-rose-100 text-rose-600 dark:text-rose-400 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition border border-rose-200 dark:border-rose-900/50">
+              <i data-lucide="rotate-ccw" class="w-4 h-4"></i>
+              Restaurar Valores Padrão
+            </button>
+          </div>
+        </div>
+
+        <!-- DICA / INFO DE USO -->
+        <div class="bg-brand-50 dark:bg-brand-950/30 p-4 rounded-2xl border border-brand-100 dark:border-brand-900/40 text-xs text-brand-900 dark:text-brand-200 space-y-1">
+          <span class="font-bold block">💡 Dica para Tela de Início (App)</span>
+          <p class="text-[11px] leading-relaxed text-brand-700 dark:text-brand-300">
+            No iPhone (Safari) ou Android (Chrome), toque no botão <strong>Compartilhar / Opções</strong> e escolha <strong>"Adicionar à Tela de Início"</strong> para usá-lo como um aplicativo nativo.
+          </p>
+        </div>
+
+      </section>
+
+    </main>
+
+    <!-- BARRA DE NAVEGAÇÃO INFERIOR ESTILO MOBILE APP -->
+    <nav class="fixed bottom-0 left-0 right-0 max-w-md mx-auto bg-white/90 dark:bg-slate-900/90 backdrop-blur-lg border-t border-slate-200/80 dark:border-slate-800 px-6 py-2 flex justify-around items-center z-40">
+      
+      <!-- Tab Dashboard -->
+      <button @click="activeTab = 'dashboard'" 
+              class="flex flex-col items-center gap-1 text-slate-400 dark:text-slate-500 transition"
+              :class="activeTab === 'dashboard' ? 'text-brand-600 dark:text-brand-400 font-bold scale-105' : ''">
+        <i data-lucide="layout-dashboard" class="w-5 h-5"></i>
+        <span class="text-[10px]">Resumo</span>
+      </button>
+
+      <!-- Tab Receitas -->
+      <button @click="activeTab = 'income'" 
+              class="flex flex-col items-center gap-1 text-slate-400 dark:text-slate-500 transition"
+              :class="activeTab === 'income' ? 'text-brand-600 dark:text-brand-400 font-bold scale-105' : ''">
+        <i data-lucide="trending-up" class="w-5 h-5"></i>
+        <span class="text-[10px]">Receitas</span>
+      </button>
+
+      <!-- Tab Despesas -->
+      <button @click="activeTab = 'expenses'" 
+              class="flex flex-col items-center gap-1 text-slate-400 dark:text-slate-500 transition"
+              :class="activeTab === 'expenses' ? 'text-brand-600 dark:text-brand-400 font-bold scale-105' : ''">
+        <i data-lucide="receipt" class="w-5 h-5"></i>
+        <span class="text-[10px]">Gastos</span>
+      </button>
+
+      <!-- Tab Configurações -->
+      <button @click="activeTab = 'settings'" 
+              class="flex flex-col items-center gap-1 text-slate-400 dark:text-slate-500 transition"
+              :class="activeTab === 'settings' ? 'text-brand-600 dark:text-brand-400 font-bold scale-105' : ''">
+        <i data-lucide="sliders" class="w-5 h-5"></i>
+        <span class="text-[10px]">Ajustes</span>
+      </button>
+
+    </nav>
+
+    <!-- MODAL PARA ADICIONAR NOVO GASTO -->
+    <div x-show="showAddModal" x-cloak 
+         class="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4"
+         x-transition:enter="transition ease-out duration-200"
+         x-transition:enter-start="opacity-0"
+         x-transition:enter-end="opacity-100">
+      
+      <div @click.away="showAddModal = false" 
+           class="w-full max-w-md bg-white dark:bg-slate-900 rounded-t-3xl sm:rounded-3xl p-6 shadow-2xl space-y-4 border border-slate-200 dark:border-slate-800">
+        
+        <div class="flex justify-between items-center">
+          <h3 class="text-base font-bold text-slate-900 dark:text-white">Adicionar Novo Gasto</h3>
+          <button @click="showAddModal = false" class="text-slate-400 hover:text-slate-600">
+            <i data-lucide="x" class="w-5 h-5"></i>
+          </button>
+        </div>
+
+        <form @submit.prevent="saveNewExpense()" class="space-y-3.5">
+          <!-- Selecionar Categoria -->
+          <div>
+            <label class="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">Categoria</label>
+            <select x-model="newExpense.category" class="w-full py-2.5 px-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white text-xs font-semibold focus:ring-2 focus:ring-brand-500 focus:outline-none">
+              <template x-for="(cat, key) in categories" :key="key">
+                <option :value="key" x-text="cat.name"></option>
+              </template>
+            </select>
+          </div>
+
+          <!-- Nome da Despesa -->
+          <div>
+            <label class="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">Descrição do Gasto</label>
+            <input type="text" x-model="newExpense.name" placeholder="Ex: IPVA, Farmácia, Supermercado..." required
+                   class="w-full py-2.5 px-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white text-xs font-medium focus:ring-2 focus:ring-brand-500 focus:outline-none">
+          </div>
+
+          <!-- Valor em R$ -->
+          <div>
+            <label class="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">Valor Mensal (R$)</label>
+            <input type="number" step="0.01" x-model.number="newExpense.value" placeholder="0,00" required
+                   class="w-full py-2.5 px-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white text-xs font-bold focus:ring-2 focus:ring-brand-500 focus:outline-none">
+          </div>
+
+          <!-- Observação / Nota opcional -->
+          <div>
+            <label class="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">Nota (Opcional)</label>
+            <input type="text" x-model="newExpense.note" placeholder="Ex: Parcela 2/5 ou fixo mensal"
+                   class="w-full py-2.5 px-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white text-xs font-normal focus:ring-2 focus:ring-brand-500 focus:outline-none">
+          </div>
+
+          <!-- Botões -->
+          <div class="pt-2 flex gap-2">
+            <button type="button" @click="showAddModal = false" class="w-1/2 py-2.5 bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-xl text-xs font-bold">Cancelar</button>
+            <button type="submit" class="w-1/2 py-2.5 bg-brand-600 hover:bg-brand-700 text-white rounded-xl text-xs font-bold shadow-md shadow-brand-500/20">Salvar Gasto</button>
+          </div>
+        </form>
+
+      </div>
+    </div>
+
+    <!-- NOTIFICAÇÃO TOAST SIMPLES -->
+    <div x-show="toast.show" x-cloak
+         x-transition:enter="transition ease-out duration-300"
+         x-transition:enter-start="opacity-0 translate-y-4"
+         x-transition:leave="transition ease-in duration-200"
+         x-transition:leave-end="opacity-0 translate-y-4"
+         class="fixed top-4 left-1/2 -translate-x-1/2 z-50 bg-slate-900 text-white dark:bg-white dark:text-slate-900 px-4 py-2 rounded-full text-xs font-semibold shadow-lg flex items-center gap-2">
+      <i data-lucide="check-circle-2" class="w-4 h-4 text-emerald-400"></i>
+      <span x-text="toast.message"></span>
+    </div>
+
+  </div>
+
+  <!-- LOGICA JAVASCRIPT / ALPINE.JS -->
+  <script>
+    function budgetApp() {
+      return {
+        activeTab: 'dashboard',
+        darkMode: false,
+        showAddModal: false,
+        chartInstance: null,
+        toast: { show: false, message: '' },
+
+        // RECEITAS INICIAIS
+        incomes: {
+          ma: 7000,
+          pa: 5000,
+          extra: 0
+        },
+
+        // NOVO ITEM PARA O MODAL
+        newExpense: {
+          category: 'transport',
+          name: '',
+          value: '',
+          note: ''
+        },
+
+        // ESTRUTURA COMPLETA DE CATEGORIAS E DESPESAS
+        categories: {
+          food: {
+            name: 'Alimentação',
+            icon: 'utensils',
+            bgColor: 'bg-rose-500',
+            chartColor: '#f43f5e',
+            open: true,
+            items: [
+              { name: 'Supermercado e Feira', value: 2200, note: 'Essencial do mês' },
+              { name: 'Restaurantes e Lanches', value: 600, note: 'Lazer alimentício' }
+            ]
+          },
+          transport: {
+            name: 'Transporte & Veículos',
+            icon: 'car',
+            bgColor: 'bg-amber-500',
+            chartColor: '#f59e0b',
+            open: true,
+            items: [
+              { name: 'Gasolina (Carro)', value: 700, note: 'Deslocamentos longos' },
+              { name: 'Gasolina (Moto)', value: 200, note: 'Uso diário rápido' },
+              { name: 'Manutenção e Seguros', value: 400, note: 'Reserva preventiva' }
+            ]
+          },
+          housing: {
+            name: 'Despesas da Casa',
+            icon: 'home',
+            bgColor: 'bg-blue-500',
+            chartColor: '#3b82f6',
+            open: true,
+            items: [
+              { name: 'Financiamento / Moradia', value: 2500, note: 'Habitação' },
+              { name: 'Energia, Água e Gás', value: 650, note: 'Contas básicas' },
+              { name: 'Internet, Celular e TV', value: 250, note: 'Conectividade' }
+            ]
+          },
+          others: {
+            name: 'Outras Despesas',
+            icon: 'more-horizontal',
+            bgColor: 'bg-purple-500',
+            chartColor: '#a855f7',
+            open: true,
+            items: [
+              { name: 'Gastos Diversos / Pessoais', value: 500, note: 'Imprevistos e extras' }
+            ]
+          }
+        },
+
+        // COMPUTED GETTERS
+        get totalIncome() {
+          return (Number(this.incomes.ma) || 0) + 
+                 (Number(this.incomes.pa) || 0) + 
+                 (Number(this.incomes.extra) || 0);
+        },
+
+        get totalExpenses() {
+          let total = 0;
+          Object.keys(this.categories).forEach(catKey => {
+            total += this.getCategoryTotal(catKey);
+          });
+          return total;
+        },
+
+        get netBalance() {
+          return this.totalIncome - this.totalExpenses;
+        },
+
+        get incomeUsagePercentage() {
+          if (this.totalIncome === 0) return 0;
+          return Math.round((this.totalExpenses / this.totalIncome) * 100);
+        },
+
+        // MÉTODOS DE CÁLCULO E MANIPULAÇÃO
+        getCategoryTotal(catKey) {
+          if (!this.categories[catKey] || !this.categories[catKey].items) return 0;
+          return this.categories[catKey].items.reduce((sum, item) => sum + (Number(item.value) || 0), 0);
+        },
+
+        getCategoryItemsCount(catKey) {
+          return this.categories[catKey]?.items?.length || 0;
+        },
+
+        formatCurrency(value) {
+          return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value || 0);
+        },
+
+        // INICIALIZAÇÃO
+        initApp() {
+          this.loadTheme();
+          this.loadSavedData();
+          
+          this.$nextTick(() => {
+            lucide.createIcons();
+            this.renderChart();
+          });
+
+          // Watcher para atualizar gráfico quando alterar dados
+          this.$watch('categories', () => {
+            this.updateChart();
+          });
+          this.$watch('incomes', () => {
+            this.updateChart();
+          });
+        },
+
+        // AÇÕES DE DESPESAS
+        openAddExpenseModal(catKey = 'food') {
+          this.newExpense = { category: catKey, name: '', value: '', note: '' };
+          this.showAddModal = true;
+          this.$nextTick(() => lucide.createIcons());
+        },
+
+        saveNewExpense() {
+          if (!this.newExpense.name || !this.newExpense.value) return;
+
+          const catKey = this.newExpense.category;
+          if (!this.categories[catKey]) return;
+
+          this.categories[catKey].items.push({
+            name: this.newExpense.name,
+            value: Number(this.newExpense.value),
+            note: this.newExpense.note || ''
+          });
+
+          this.showAddModal = false;
+          this.saveData();
+          this.showToast('Gasto adicionado!');
+          this.$nextTick(() => lucide.createIcons());
+        },
+
+        deleteExpense(catKey, index) {
+          this.categories[catKey].items.splice(index, 1);
+          this.saveData();
+          this.showToast('Item removido');
+        },
+
+        // PERSISTÊNCIA LOCALSTORAGE
+        saveData() {
+          const payload = {
+            incomes: this.incomes,
+            categories: this.categories
+          };
+          localStorage.setItem('budget_family_data_v1', JSON.stringify(payload));
+          this.updateChart();
+        },
+
+        loadSavedData() {
+          const saved = localStorage.getItem('budget_family_data_v1');
+          if (saved) {
+            try {
+              const parsed = JSON.parse(saved);
+              if (parsed.incomes) this.incomes = parsed.incomes;
+              if (parsed.categories) {
+                // Merge seguro para não perder ícones/estilos
+                Object.keys(parsed.categories).forEach(k => {
+                  if (this.categories[k]) {
+                    this.categories[k].items = parsed.categories[k].items || [];
+                  } else {
+                    this.categories[k] = parsed.categories[k];
+                  }
+                });
+              }
+            } catch (e) {
+              console.error('Erro ao carregar dados salvos', e);
+            }
+          }
+        },
+
+        // EXPORT / IMPORT BACKUP
+        exportData() {
+          const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify({
+            incomes: this.incomes,
+            categories: this.categories,
+            exportDate: new Date().toISOString()
+          }, null, 2));
+          
+          const downloadAnchor = document.createElement('a');
+          downloadAnchor.setAttribute("href", dataStr);
+          downloadAnchor.setAttribute("download", `orcamento-familia-${new Date().toISOString().slice(0,10)}.json`);
+          document.body.appendChild(downloadAnchor);
+          downloadAnchor.click();
+          downloadAnchor.remove();
+          this.showToast('Backup exportado com sucesso!');
+        },
+
+        importData(event) {
+          const file = event.target.files[0];
+          if (!file) return;
+
+          const reader = new FileReader();
+          reader.onload = (e) => {
+            try {
+              const imported = JSON.parse(e.target.result);
+              if (imported.incomes && imported.categories) {
+                this.incomes = imported.incomes;
+                this.categories = imported.categories;
+                this.saveData();
+                this.showToast('Dados restaurados com sucesso!');
+                setTimeout(() => location.reload(), 800);
+              } else {
+                alert('Arquivo JSON inválido.');
+              }
+            } catch (err) {
+              alert('Erro ao ler o arquivo JSON de backup.');
+            }
+          };
+          reader.readAsText(file);
+        },
+
+        resetToDefault() {
+          if (confirm('Tem certeza que deseja resetar o orçamento para os valores padrão?')) {
+            localStorage.removeItem('budget_family_data_v1');
+            location.reload();
+          }
+        },
+
+        // DARK MODE
+        toggleDarkMode() {
+          this.darkMode = !this.darkMode;
+          if (this.darkMode) {
+            document.documentElement.classList.add('dark');
+            localStorage.setItem('budget_theme', 'dark');
+          } else {
+            document.documentElement.classList.remove('dark');
+            localStorage.setItem('budget_theme', 'light');
+          }
+          this.updateChart();
+        },
+
+        loadTheme() {
+          const savedTheme = localStorage.getItem('budget_theme');
+          if (savedTheme === 'dark' || (!savedTheme && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+            this.darkMode = true;
+            document.documentElement.classList.add('dark');
+          } else {
+            this.darkMode = false;
+            document.documentElement.classList.remove('dark');
+          }
+        },
+
+        showToast(msg) {
+          this.toast.message = msg;
+          this.toast.show = true;
+          setTimeout(() => { this.toast.show = false; }, 2500);
+        },
+
+        // CHART.JS RENDER
+        renderChart() {
+          const ctx = document.getElementById('categoryChart');
+          if (!ctx) return;
+
+          const labels = [];
+          const data = [];
+          const colors = [];
+
+          Object.keys(this.categories).forEach(key => {
+            const cat = this.categories[key];
+            labels.push(cat.name);
+            data.push(this.getCategoryTotal(key));
+            colors.push(cat.chartColor);
+          });
+
+          this.chartInstance = new Chart(ctx, {
+            type: 'doughnut',
+            data: {
+              labels: labels,
+              datasets: [{
+                data: data,
+                backgroundColor: colors,
+                borderWidth: 0,
+                hoverOffset: 4
+              }]
+            },
+            options: {
+              responsive: true,
+              maintainAspectRatio: false,
+              plugins: {
+                legend: {
+                  position: 'bottom',
+                  labels: {
+                    boxWidth: 10,
+                    font: { size: 10, family: "'Plus Jakarta Sans', sans-serif" },
+                    color: this.darkMode ? '#cbd5e1' : '#475569'
+                  }
+                }
+              },
+              cutout: '70%'
+            }
+          });
+        },
+
+        updateChart() {
+          if (!this.chartInstance) return;
+          const data = [];
+          Object.keys(this.categories).forEach(key => {
+            data.push(this.getCategoryTotal(key));
+          });
+          this.chartInstance.data.datasets[0].data = data;
+          this.chartInstance.options.plugins.legend.labels.color = this.darkMode ? '#cbd5e1' : '#475569';
+          this.chartInstance.update();
+        }
+      }
+    }
+  </script>
+</body>
+</html>
